@@ -1,0 +1,16 @@
+# vim
+.netrwhist
+*sw[po]
+*~
+
+# some python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ignore data
+data/
+references/
+result/
+sample/
+
