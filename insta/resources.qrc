@@ -1,5 +1,8 @@
 <RCC>
     <qresource prefix="/plugins/insta" >
-        <file>icon.png</file>
+        <file>icon16.png</file>
+    </qresource>
+    <qresource prefix="/plugins/insta" >
+        <file>icon69.png</file>
     </qresource>
 </RCC>

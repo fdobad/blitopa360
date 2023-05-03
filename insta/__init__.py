@@ -22,7 +22,6 @@
  ***************************************************************************/
  This script initializes the plugin, making it known to QGIS.
 """
-from qgis.PyQt import QtWidgets
 from importlib.util import find_spec
 from pathlib import Path
 
@@ -41,22 +40,12 @@ def classFactory(iface):  # pylint: disable=invalid-name
         if mod:=find_spec(req):
             pass
         else:
-            error=True
             not_found+=[req]
+            error=True
     if error:
+        from .err_dialog import ErrDialog 
         return ErrDialog(iface,not_found)
     #
     from .insta import Insta
     return Insta(iface)
 
-# TODO 
-# 1. AttributeError: 'ErrDialog' object has no attribute 'unload'
-# 2. from qgis.core import Qgis, QgsMessageLog
-class ErrDialog:
-    def __init__(self, iface, msg):
-        self.iface = iface
-        self.msg=str(msg)
-
-    def initGui(self):
-        self.dlg = QtWidgets.QErrorMessage()
-        self.dlg.showMessage('error'+self.msg)
