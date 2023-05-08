@@ -52,6 +52,7 @@ exiftool -ext insp dir 2>/dev/null | tee results.txt
 ```
 ${GPSDateTime} -> 2022:01:05 15:31:35Z
 ${GPSDateTime;DateFmt("%s")} -> 1641396695
+${CreateDate;DateFmt("%s")}
 ```
 
 ### insp
@@ -59,6 +60,9 @@ ${GPSDateTime;DateFmt("%s")} -> 1641396695
 ./exiftool -s -ee IMG...insp > insp_all_tags.txt
 ./exiftool -ee -p '${creationdate} ${gpslatitude#} ${gpslongitude#} ${gpsaltitude#}' 
 ./exiftool -s -ee3 -p '$ImageDescription $CreateDate $gpslatitude $gpslongitude $gpsaltitude' ~/directory/ 2>/dev/null | tee output.txt
+./exiftool -s -ee3 -p '$ImageDescription $CreateDate ${gpslatitude#} ${gpslongitude#} ${gpsaltitude#}'
+
+blitopa/source/Image-ExifTool-12.62/exiftool -s -ee3 -p '$ImageDescription,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#}' -ext insp blitopa/data/RodriAbogado/Camera01/ 2>/dev/null | tee exif_output.csv
 ```
 
 ### insv
