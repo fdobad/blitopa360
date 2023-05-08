@@ -26,6 +26,7 @@ from pathlib import Path
 from subprocess import Popen, PIPE
 from shlex import split as shlex_split
 from logging import warning
+from sys import platform
 from pandas import Timestamp, DataFrame
 from pandas import read_csv
 
@@ -92,7 +93,6 @@ class Insta:
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
         return QCoreApplication.translate('Insta', message)
 
-
     def add_action(
         self,
         icon_path,
@@ -142,7 +142,6 @@ class Insta:
             added to self.actions list.
         :rtype: QAction
         """
-
         icon = QIcon(icon_path)
         action = QAction(icon, text, parent)
         action.triggered.connect(callback)
@@ -164,22 +163,18 @@ class Insta:
                 action)
 
         self.actions.append(action)
-
         return action
 
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
-
         icon_path = ':/plugins/insta/icon16.png'
         self.add_action(
             icon_path,
             text=self.tr(u'Insta360 importer'),
             callback=self.run,
             parent=self.iface.mainWindow())
-
         # will be set False in run()
         self.first_start = True
-
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
@@ -189,17 +184,14 @@ class Insta:
                 action)
             self.iface.removeToolBarIcon(action)
 
-
     def run(self):
         """Run method that performs all the real work"""
-
         # Create the dialog with elements (after translation) and keep reference
         # Only create GUI ONCE in callback, so that it will only load when the plugin is started
-        if self.first_start == True:
+        if self.first_start:
             self.first_start = False
             self.dlg = InstaDialog()
             QgsMessageLog.logMessage( 'Dialog created', MSGCAT , Qgis.Info)
-
         # show the dialog
         self.dlg.show()
         # Run the dialog event loop
@@ -207,21 +199,32 @@ class Insta:
         # See if OK was pressed
         if result:
             apath = self.dlg.mQgsFileWidget.filePath()
-            QgsMessageLog.logMessage( apath, MSGCAT , Qgis.Info)
-            self.from_file(apath)
-            #doit = InstaDoIt(apath, self.plugin_dir)
-            #if not doit.check():
-            #    QgsMessageLog.logMessage( 'No .insp file found', MSGCAT , Qgis.Critical)
-            #    return
-            #self.iface.addVectorLayer( doit.doit())
-            #QgsProject.instance().addMapLayer(doit.doit())
+            QgsMessageLog.logMessage('apath '+apath, MSGCAT , Qgis.Info)
+            #TODO check if exif csv exists, compare length to files
+            self.exec_exiftool( apath)
+            #TODO check if import csv exists, compare nans length to files
+            proc_exiftool_output(apath)
+            self.from_file( apath)
             QgsMessageLog.logMessage(f'run end true', MSGCAT , Qgis.Info)
         QgsMessageLog.logMessage(f'run end false', MSGCAT , Qgis.Info)
 
+    def exec_exiftool(self, apath):
+        if platform=='linux':
+            wd = Path(self.plugin_dir,'Image-ExifTool-12.62')
+            pre = r"""./exiftool -s -ee3 -p '$ImageDescription,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#}' -ext insp """
+            post = r""" 2>/dev/null | tee """
+            #cmd = shlex_split(pre+apath+post+str(Path(apath,'exiftool_output.csv')))
+            cmd = pre+apath+post+str(Path(apath,'exiftool_output.csv'))
+            QgsMessageLog.logMessage(f'cmd {cmd}', MSGCAT , Qgis.Info)
+            process = Popen( cmd, stdout=PIPE, stderr=PIPE, cwd=wd, shell=True)
+            stdout, stderr = process.communicate()
+        QgsMessageLog.logMessage(f'stdout {stdout}', MSGCAT , Qgis.Info)
+        QgsMessageLog.logMessage(f'stderr {stderr}', MSGCAT , Qgis.Info)
+
     def from_file(self, apath):
-        proc_exiftool_output(apath)
-        vectorLayer = processing.run('qgis:createpointslayerfromtable',{ 'INPUT' : str(Path(apath,'import_me.csv')), 'MFIELD' : None, 'OUTPUT' : 'TEMPORARY_OUTPUT', 'TARGET_CRS' : QgsCoordinateReferenceSystem('EPSG:4326'), 'XFIELD' : 'lon', 'YFIELD' : 'lat', 'ZFIELD' : 'ele' })['OUTPUT']
+        vectorLayer = processing.run('qgis:createpointslayerfromtable',{ 'INPUT' : str(Path(apath,'import_me.csv')), 'MFIELD' : None, 'OUTPUT' : 'TEMPORARY_OUTPUT', 'TARGET_CRS' : QgsCoordinateReferenceSystem('EPSG:4326'), 'XFIELD' : 'lon', 'YFIELD' : 'lat', 'ZFIELD' : 'ele', 'MFIELD' : 'datetime' })['OUTPUT']
         vectorLayer.setName(MSGCAT)
+        vectorLayer.loadNamedStyle( str(Path(self.plugin_dir, 'points_layerStyle.qml')))
         QgsProject.instance().addMapLayer(vectorLayer)
 
     def from_file_creatinglayer(self, apath):
@@ -236,14 +239,35 @@ class Insta:
             f.setAttributes( df[['dt','filename','tag','ele']].iloc[i].to_list())
             feats += [f]
         vl.dataProvider().addFeatures(feats)
+        #TODOvl.loadNamedStyle( os_path_join( result['plugin_dir'], 'img'+sep+'Fire_Evolution_layerStyle.qml'))
         QgsProject.instance().addMapLayer(vl)
 
 def proc_exiftool_output(apath):
-    # read
-    df = read_csv(Path(apath,'exiftool_output.csv'), names=['filename','date','time','lat','lon','ele'], sep=' ')
+    #apath=apath=Path.cwd()
+    df = read_csv(Path(apath,'exiftool_output.csv'), names=['filename','datetime','lat','lon','ele'], sep=',')
     QgsMessageLog.logMessage( f'{len(df)} rows found', MSGCAT , Qgis.Info)
-    #df = read_csv('output.txt', names=['filename','date','time','lat','lon','ele'], sep=' ')
+    df['tag']=((df['lat']!=0)|(df['lon']!=0)).astype(np.int64)
+    for col in ['lat','lon','ele']:
+        df[col] = df[col].apply( lambda x: np.nan if x==0 else x)
+    QgsMessageLog.logMessage( f"{df['tag'].sum()} tag sum", MSGCAT , Qgis.Info)
+    df.sort_values('datetime', inplace=True)
+    df.index = df.datetime
+    #df[['lat','lon','ele']] = df[['lat','lon','ele']].interpolate(method='polynomial', order=5, limit_direction='both')
+    df[['lat','lon','ele']] = df[['lat','lon','ele']].interpolate()
+    df.to_csv(Path(apath,'import_me.csv'),sep=',')
     # datetime
+
+def temp():
+    dl = df.copy()
+    for i in df.index:
+        if i%3==0:
+            dl['lat'].iloc[i] = np.nan
+            dl['lon'].iloc[i] = np.nan
+            dl['ele'].iloc[i] = np.nan
+    dl.index = dl.datetime
+    dl.interpolate()
+def ex(apath):
+    df = read_csv('output.txt', names=['filename','date','time','lat','lon','ele'], sep=' ')
     df.date = df.date.apply( lambda x: x.replace(':','-'))
     df['dt'] = [ Timestamp(df['date'][i]+' '+df['time'][i]) for i in df.index ]
     df['epoch'] = df.dt.astype('int64')
