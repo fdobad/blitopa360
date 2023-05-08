@@ -25,18 +25,22 @@ import os.path
 from pathlib import Path
 from subprocess import Popen, PIPE
 from shlex import split as shlex_split
+from logging import warning
 from pandas import Timestamp, DataFrame
+from pandas import read_csv
 
-from qgis.core import Qgis, QgsFeature, QgsMessageLog, QgsVectorLayer, QgsGeometry, QgsPointXY, QgsProject
+from qgis.core import Qgis, QgsFeature, QgsMessageLog, QgsVectorLayer, QgsGeometry, QgsPointXY, QgsProject, QgsCoordinateReferenceSystem
 from qgis.PyQt.QtCore import QCoreApplication, QSettings, QTranslator
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
+from qgis import processing
 
 # Import the code for the dialog
 from .insta_dialog import InstaDialog
 # Initialize Qt resources from file resources.py
 from .resources import *
 
+MSGCAT = 'blitoPa'
 
 class Insta:
     """QGIS Plugin Implementation."""
@@ -194,6 +198,7 @@ class Insta:
         if self.first_start == True:
             self.first_start = False
             self.dlg = InstaDialog()
+            QgsMessageLog.logMessage( 'Dialog created', MSGCAT , Qgis.Info)
 
         # show the dialog
         self.dlg.show()
@@ -203,15 +208,62 @@ class Insta:
         if result:
             apath = self.dlg.mQgsFileWidget.filePath()
             QgsMessageLog.logMessage( apath, MSGCAT , Qgis.Info)
-            doit = InstaDoIt(apath, self.plugin_dir)
-            if not doit.check():
-                QgsMessageLog.logMessage( 'No .insp file found', MSGCAT , Qgis.Critical)
-                return
+            self.from_file(apath)
+            #doit = InstaDoIt(apath, self.plugin_dir)
+            #if not doit.check():
+            #    QgsMessageLog.logMessage( 'No .insp file found', MSGCAT , Qgis.Critical)
+            #    return
             #self.iface.addVectorLayer( doit.doit())
-            QgsProject.instance().addMapLayer(doit.doit())
+            #QgsProject.instance().addMapLayer(doit.doit())
+            QgsMessageLog.logMessage(f'run end true', MSGCAT , Qgis.Info)
+        QgsMessageLog.logMessage(f'run end false', MSGCAT , Qgis.Info)
 
+    def from_file(self, apath):
+        proc_exiftool_output(apath)
+        vectorLayer = processing.run('qgis:createpointslayerfromtable',{ 'INPUT' : str(Path(apath,'import_me.csv')), 'MFIELD' : None, 'OUTPUT' : 'TEMPORARY_OUTPUT', 'TARGET_CRS' : QgsCoordinateReferenceSystem('EPSG:4326'), 'XFIELD' : 'lon', 'YFIELD' : 'lat', 'ZFIELD' : 'ele' })['OUTPUT']
+        vectorLayer.setName(MSGCAT)
+        QgsProject.instance().addMapLayer(vectorLayer)
 
+    def from_file_creatinglayer(self, apath):
+        vl=QgsVectorLayer("Point?crs=epsg:4326&field=datetime:datetime&field=filename:string&field=tag:integer&field=elevation:double",MSGCAT,"memory")
+        df = proc_exiftool_output(apath)
+        feats = []
+        for i in df.index:
+            f = QgsFeature()
+            f.setId(i)
+            f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(*df[['lon','lat']].iloc[i])))
+            QgsMessageLog.logMessage( f"{df[['dt','filename','tag','ele']].iloc[i].to_list()}!", MSGCAT , Qgis.Info)
+            f.setAttributes( df[['dt','filename','tag','ele']].iloc[i].to_list())
+            feats += [f]
+        vl.dataProvider().addFeatures(feats)
+        QgsProject.instance().addMapLayer(vl)
 
+def proc_exiftool_output(apath):
+    # read
+    df = read_csv(Path(apath,'exiftool_output.csv'), names=['filename','date','time','lat','lon','ele'], sep=' ')
+    QgsMessageLog.logMessage( f'{len(df)} rows found', MSGCAT , Qgis.Info)
+    #df = read_csv('output.txt', names=['filename','date','time','lat','lon','ele'], sep=' ')
+    # datetime
+    df.date = df.date.apply( lambda x: x.replace(':','-'))
+    df['dt'] = [ Timestamp(df['date'][i]+' '+df['time'][i]) for i in df.index ]
+    df['epoch'] = df.dt.astype('int64')
+    df['dt'] = df['dt'].apply( lambda x: x.isoformat(timespec='seconds'))
+    #df['ds'] = df.dt.diff().apply( lambda x: x.total_seconds())
+    # is tagged
+    df['tag']=((df['lat']!=0)|(df['lon']!=0)).astype(np.int64)
+    QgsMessageLog.logMessage( f"{df['tag'].sum()} tag sum", MSGCAT , Qgis.Info)
+    # interpolate
+    for col in ['lat','lon','ele']:
+        df[col] = df[col].apply( lambda x: np.nan if x==0 else x)
+    QgsMessageLog.logMessage( f"{df[['lat','lon','ele']].isna().sum()} not tagged", MSGCAT , Qgis.Info)
+    df[['lat','lon','ele']].isna().sum()
+    #df[['lat','lon','ele','epoch']] = df[['lat','lon','ele','epoch']].interpolate(method='polynomial', order=5, limit_direction='both')
+    #df[['lat','lon','ele','epoch']] = df[['lat','lon','ele','epoch']].interpolate(method='polynomial', order=5)
+    #df[['lat','lon','ele']].isna().sum()
+    df[['lat','lon','ele','epoch']] = df[['lat','lon','ele','epoch']].interpolate(method='linear')
+    df[['lat','lon','ele']].isna().sum()
+    df.to_csv(Path(apath,'import_me.csv'),sep=',')
+    return df
 
 # TODO
 # InstaDoIt to qgsTask
@@ -219,7 +271,6 @@ class Insta:
 # exiftool disable warnings
 # preguntarle al ivan cuanto cuesta leerlo rapido
 
-MSGCAT = 'tioblitoPa'
 
 import numpy as np
 class InstaDoIt:
