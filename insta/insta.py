@@ -224,6 +224,10 @@ class Insta:
     def from_file(self, apath):
         vectorLayer = processing.run('qgis:createpointslayerfromtable',{ 'INPUT' : str(Path(apath,'import_me.csv')), 'MFIELD' : None, 'OUTPUT' : 'TEMPORARY_OUTPUT', 'TARGET_CRS' : QgsCoordinateReferenceSystem('EPSG:4326'), 'XFIELD' : 'lon', 'YFIELD' : 'lat', 'ZFIELD' : 'ele', 'MFIELD' : 'datetime' })['OUTPUT']
         vectorLayer.setName(MSGCAT)
+        cmd = f"sed -i 's:fdotag:{apath}:' points_layerStyle.qml"
+        process = Popen( shlex_split(cmd), stdout=PIPE, stderr=PIPE, cwd=self.plugin_dir)
+        stdout, stderr = process.communicate()
+        QgsMessageLog.logMessage( f'{cmd} {stdout} {stderr}', MSGCAT , Qgis.Info)
         vectorLayer.loadNamedStyle( str(Path(self.plugin_dir, 'points_layerStyle.qml')))
         QgsProject.instance().addMapLayer(vectorLayer)
 

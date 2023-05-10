@@ -347,7 +347,7 @@
   <expressionfields/>
   <attributeactions>
     <defaultAction key="Canvas" value="{00000000-0000-0000-0000-000000000000}"/>
-    <actionsetting icon="" action="/media/fdo/e4fab0be-22f6-4f6b-a8d3-60cd9b13359c/home/fdo/dev/blitopa/data/RodriAbogado/Camera01/[%filename%]" isEnabledOnlyWhenEditable="0" shortTitle="Open File" type="5" name="Open File" capture="1" id="{1382eb7d-5607-41e5-994c-797b0b5c132f}" notificationMessage="">
+    <actionsetting icon="" action="fdotag[%filename%]" isEnabledOnlyWhenEditable="0" shortTitle="Open File" type="5" name="Open File" capture="1" id="{1382eb7d-5607-41e5-994c-797b0b5c132f}" notificationMessage="">
       <actionScope id="Feature"/>
       <actionScope id="Canvas"/>
     </actionsetting>
