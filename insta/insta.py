@@ -27,6 +27,7 @@ from subprocess import Popen, PIPE
 from shlex import split as shlex_split
 from logging import warning
 from sys import platform
+import numpy as np
 from pandas import Timestamp, DataFrame
 from pandas import read_csv
 
@@ -186,112 +187,84 @@ class Insta:
 
     def run(self):
         """Run method that performs all the real work"""
-        # Create the dialog with elements (after translation) and keep reference
-        # Only create GUI ONCE in callback, so that it will only load when the plugin is started
         if self.first_start:
             self.first_start = False
             self.dlg = InstaDialog()
+            QgsProject.instance().homePathChanged.connect( self.slot_homePathChanged)
             QgsMessageLog.logMessage( 'Dialog created', MSGCAT , Qgis.Info)
-        # show the dialog
         self.dlg.show()
-        # Run the dialog event loop
         result = self.dlg.exec_()
-        # See if OK was pressed
         if result:
             apath = self.dlg.mQgsFileWidget.filePath()
-            QgsMessageLog.logMessage('apath '+apath, MSGCAT , Qgis.Info)
+            QgsMessageLog.logMessage('Reading media from '+apath, MSGCAT , Qgis.Info)
             #TODO check if exif csv exists, compare length to files
-            self.exec_exiftool( apath)
+            exec_exiftool( apath, self.plugin_dir)
+            QgsMessageLog.logMessage('Extracted metadata to exiftool_output.csv', MSGCAT , Qgis.Info)
             #TODO check if import csv exists, compare nans length to files
             proc_exiftool_output(apath)
-            self.from_file( apath)
-            QgsMessageLog.logMessage(f'run end true', MSGCAT , Qgis.Info)
-        QgsMessageLog.logMessage(f'run end false', MSGCAT , Qgis.Info)
+            QgsMessageLog.logMessage('Processed metadata to import_me.csv', MSGCAT , Qgis.Info)
+            layer_from_file( apath, self.plugin_dir)
+            QgsMessageLog.logMessage('Loaded layer', MSGCAT , Qgis.Info)
+            QgsMessageLog.logMessage('All Done', MSGCAT , Qgis.Success)
+            return
+        QgsMessageLog.logMessage( 'Dialog closed, no action', MSGCAT , Qgis.Info)
 
-    def exec_exiftool(self, apath):
+    def slot_homePathChanged(self, *args, **kwargs):
+        self.dlg.mQgsFileWidget.setFilePath(QgsProject.instance().absolutePath())
+        QgsMessageLog.logMessage('Project homePath changed, changing folder chooser too...', MSGCAT , Qgis.Info)
+
+def exec_exiftool(apath, plugin_dir):
+    try:
         if platform=='linux':
-            wd = Path(self.plugin_dir,'Image-ExifTool-12.62')
-            pre = r"""./exiftool -s -ee3 -p '$ImageDescription,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#}' -ext insp """
+            wd = Path(plugin_dir,'Image-ExifTool-12.62')
+            # filepath -> ImageDescription
+            pre = r"""./exiftool -s -ee3 -p '$filepath,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#}' -ext insp """
             post = r""" 2>/dev/null | tee """
             #cmd = shlex_split(pre+apath+post+str(Path(apath,'exiftool_output.csv')))
             cmd = pre+apath+post+str(Path(apath,'exiftool_output.csv'))
-            QgsMessageLog.logMessage(f'cmd {cmd}', MSGCAT , Qgis.Info)
+            QgsMessageLog.logMessage(f'cmd {cmd}', MSGCAT , Qgis.Debug)
             process = Popen( cmd, stdout=PIPE, stderr=PIPE, cwd=wd, shell=True)
             stdout, stderr = process.communicate()
-        QgsMessageLog.logMessage(f'stdout {stdout}', MSGCAT , Qgis.Info)
-        QgsMessageLog.logMessage(f'stderr {stderr}', MSGCAT , Qgis.Info)
-
-    def from_file(self, apath):
-        vectorLayer = processing.run('qgis:createpointslayerfromtable',{ 'INPUT' : str(Path(apath,'import_me.csv')), 'MFIELD' : None, 'OUTPUT' : 'TEMPORARY_OUTPUT', 'TARGET_CRS' : QgsCoordinateReferenceSystem('EPSG:4326'), 'XFIELD' : 'lon', 'YFIELD' : 'lat', 'ZFIELD' : 'ele', 'MFIELD' : 'datetime' })['OUTPUT']
-        vectorLayer.setName(MSGCAT)
-        cmd = f"sed -i 's:fdotag:{apath}:' points_layerStyle.qml"
-        process = Popen( shlex_split(cmd), stdout=PIPE, stderr=PIPE, cwd=self.plugin_dir)
-        stdout, stderr = process.communicate()
-        QgsMessageLog.logMessage( f'{cmd} {stdout} {stderr}', MSGCAT , Qgis.Info)
-        vectorLayer.loadNamedStyle( str(Path(self.plugin_dir, 'points_layerStyle.qml')))
-        QgsProject.instance().addMapLayer(vectorLayer)
-
-    def from_file_creatinglayer(self, apath):
-        vl=QgsVectorLayer("Point?crs=epsg:4326&field=datetime:datetime&field=filename:string&field=tag:integer&field=elevation:double",MSGCAT,"memory")
-        df = proc_exiftool_output(apath)
-        feats = []
-        for i in df.index:
-            f = QgsFeature()
-            f.setId(i)
-            f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(*df[['lon','lat']].iloc[i])))
-            QgsMessageLog.logMessage( f"{df[['dt','filename','tag','ele']].iloc[i].to_list()}!", MSGCAT , Qgis.Info)
-            f.setAttributes( df[['dt','filename','tag','ele']].iloc[i].to_list())
-            feats += [f]
-        vl.dataProvider().addFeatures(feats)
-        #TODOvl.loadNamedStyle( os_path_join( result['plugin_dir'], 'img'+sep+'Fire_Evolution_layerStyle.qml'))
-        QgsProject.instance().addMapLayer(vl)
+        QgsMessageLog.logMessage(f'stdout {stdout}', MSGCAT , Qgis.Debug)
+        QgsMessageLog.logMessage(f'stderr {stderr}', MSGCAT , Qgis.Debug)
+    except Exception as e:
+        QgsMessageLog.logMessage( f"Problem procesing exiftool output: {e}", MSGCAT , Qgis.Critical)
 
 def proc_exiftool_output(apath):
-    #apath=apath=Path.cwd()
-    df = read_csv(Path(apath,'exiftool_output.csv'), names=['filename','datetime','lat','lon','ele'], sep=',')
-    QgsMessageLog.logMessage( f'{len(df)} rows found', MSGCAT , Qgis.Info)
-    df['tag']=((df['lat']!=0)|(df['lon']!=0)).astype(np.int64)
-    for col in ['lat','lon','ele']:
-        df[col] = df[col].apply( lambda x: np.nan if x==0 else x)
-    QgsMessageLog.logMessage( f"{df['tag'].sum()} tag sum", MSGCAT , Qgis.Info)
-    df.sort_values('datetime', inplace=True)
-    df.index = df.datetime
-    #df[['lat','lon','ele']] = df[['lat','lon','ele']].interpolate(method='polynomial', order=5, limit_direction='both')
-    df[['lat','lon','ele']] = df[['lat','lon','ele']].interpolate()
-    df.to_csv(Path(apath,'import_me.csv'),sep=',')
-    # datetime
+    """ load exiftool_output.csv
+        flag and interpolate missing geoloc data
+        write import_me.csv
+    """
+    try:
+        #apath=Path.cwd()
+        df = read_csv(Path(apath,'exiftool_output.csv'), names=['filename','datetime','lat','lon','ele'], sep=',')
+        QgsMessageLog.logMessage( f'{len(df)} rows found', MSGCAT , Qgis.Info)
+        df['tag']=((df['lat']!=0)|(df['lon']!=0)).astype(np.int64)
+        for col in ['lat','lon','ele']:
+            df[col] = df[col].apply( lambda x: np.nan if x==0 else x)
+        QgsMessageLog.logMessage( f"{df['tag'].sum()} tag sum", MSGCAT , Qgis.Info)
+        df.sort_values('datetime', inplace=True)
+        df.index = df.datetime
+        #df[['lat','lon','ele']] = df[['lat','lon','ele']].interpolate(method='polynomial', order=5, limit_direction='both')
+        df[['lat','lon','ele']] = df[['lat','lon','ele']].interpolate()
+        df.to_csv(Path(apath,'import_me.csv'),sep=',')
+    except Exception as e:
+        QgsMessageLog.logMessage( f"Problem procesing exiftool output: {e}", MSGCAT , Qgis.Critical)
 
-def temp():
-    dl = df.copy()
-    for i in df.index:
-        if i%3==0:
-            dl['lat'].iloc[i] = np.nan
-            dl['lon'].iloc[i] = np.nan
-            dl['ele'].iloc[i] = np.nan
-    dl.index = dl.datetime
-    dl.interpolate()
-def ex(apath):
-    df = read_csv('output.txt', names=['filename','date','time','lat','lon','ele'], sep=' ')
-    df.date = df.date.apply( lambda x: x.replace(':','-'))
-    df['dt'] = [ Timestamp(df['date'][i]+' '+df['time'][i]) for i in df.index ]
-    df['epoch'] = df.dt.astype('int64')
-    df['dt'] = df['dt'].apply( lambda x: x.isoformat(timespec='seconds'))
-    #df['ds'] = df.dt.diff().apply( lambda x: x.total_seconds())
-    # is tagged
-    df['tag']=((df['lat']!=0)|(df['lon']!=0)).astype(np.int64)
-    QgsMessageLog.logMessage( f"{df['tag'].sum()} tag sum", MSGCAT , Qgis.Info)
-    # interpolate
-    for col in ['lat','lon','ele']:
-        df[col] = df[col].apply( lambda x: np.nan if x==0 else x)
-    QgsMessageLog.logMessage( f"{df[['lat','lon','ele']].isna().sum()} not tagged", MSGCAT , Qgis.Info)
-    df[['lat','lon','ele']].isna().sum()
-    #df[['lat','lon','ele','epoch']] = df[['lat','lon','ele','epoch']].interpolate(method='polynomial', order=5, limit_direction='both')
-    #df[['lat','lon','ele','epoch']] = df[['lat','lon','ele','epoch']].interpolate(method='polynomial', order=5)
-    #df[['lat','lon','ele']].isna().sum()
-    df[['lat','lon','ele','epoch']] = df[['lat','lon','ele','epoch']].interpolate(method='linear')
-    df[['lat','lon','ele']].isna().sum()
-    df.to_csv(Path(apath,'import_me.csv'),sep=',')
-    return df
+def layer_from_file(apath, plugin_dir):
+    """ processing toolbox create points from csv
+        load style
+        add to layer
+    """
+    try:
+        output = processing.run('qgis:createpointslayerfromtable',{ 'INPUT' : str(Path(apath,'import_me.csv')), 'MFIELD' : None, 'OUTPUT' : str(Path(apath,'blitopa.gpkg')), 'TARGET_CRS' : QgsCoordinateReferenceSystem('EPSG:4326'), 'XFIELD' : 'lon', 'YFIELD' : 'lat', 'ZFIELD' : 'ele', 'MFIELD' : 'datetime' })['OUTPUT']
+        
+        QgsMessageLog.logMessage( f"Createpointslayerfromtable created {output}", MSGCAT , Qgis.Info)
+        vectorLayer = QgsVectorLayer( str(Path(apath,'blitopa.gpkg'))+'|layername=blitopa', MSGCAT)
+        vectorLayer.loadNamedStyle( str(Path(plugin_dir, 'points_layerStyle.qml')))
+        QgsProject.instance().addMapLayer(vectorLayer)
+    except Exception as e:
+        QgsMessageLog.logMessage( f"Problem procesing exiftool output: {e}", MSGCAT , Qgis.Critical)
 
 # TODO
 # InstaDoIt to qgsTask
@@ -299,8 +272,6 @@ def ex(apath):
 # exiftool disable warnings
 # preguntarle al ivan cuanto cuesta leerlo rapido
 
-
-import numpy as np
 class InstaDoIt:
     def __init__(self, img_dir, plugin_dir):
         self.exif_dir = Path( plugin_dir) / 'exiftool'
