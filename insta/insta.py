@@ -25,7 +25,7 @@ import os.path
 from logging import warning
 from pathlib import Path
 from shlex import split as shlex_split
-from sys import platform
+from platform import system as plt_sys
 
 import numpy as np
 from pandas import read_csv
@@ -236,10 +236,10 @@ def qproc_cmd(apath):
     # filepath -> ImageDescription
     pre ='./exiftool'
     post=' -s -ee3 -p $filepath,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#} -ext insp '
-    if platform=='linux':
-        plt=''
-    elif  platform=='Windows':
+    if plt_sys()=='Windows':
         plt='(-1).exe'
+    else:
+        plt=''
     cmd = pre+plt+post+str(apath)
     QgsMessageLog.logMessage(f'cmd {cmd}', MSGCAT, Qgis.Info)
     return cmd, apath
