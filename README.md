@@ -1,13 +1,33 @@
-# Blitopa plugin
+# Blitopa QGIS plugin
 
-Insta360 media into QGIS layer plugin for quick geolocated-visualization
+Import Insta360 media into a QGIS point layer, click to launch your favorite viewer.
 
-Insta360 files:
+# Installation
+1. Add my plugin-repository: https://fdobad.github.io/qgis-plugin-server/plugins.xml
+2. Type 'blitopa'
+3. Click 'Install Plugin'
+![install gif](blitopa_installation.gif)
+Now you have a new icon ![icon](insta/insta16.png) in the plugin toolbar
+
+# Usage
+## Importing
+Select a folder with '.insp' files inside, click 'Ok'.
+_new point layer will be displayed, named as the folder with the geolocalized photos._
+- Missing tags will be interpolated
+- Open the Log Messages panel to check progress or report on broken files
+- Disable Logs to speed up
+
+## Viewing
+- Once per new layer: Click on the "Run Feature Action" (looks like a cog with a play button being clicked) configuration (the dropdown next to it): select 'Open File'
+- Select the correct layer, click on a point to launch your default viewer program
+
+# Development:
+### Insta360 files:
 - 2 spherical fish eye format  
 - Video IMG_YYYYMMDD_100902_00_001.insv
 - Image IMG_YYYYMMDD_100902_00_001.insp
 
-# RoadMap
+### RoadMap
 1. Extract Metadata from images and videos 100%
 2. read metadata into QGIS layer 75% : todo video and pics options
 3. put a link in each waypoint to the picture
@@ -16,11 +36,11 @@ Insta360 files:
     - transform a fisheye image into a normal perspective: https://github.com/duducosmos/defisheye
 5. put a thumbnail in each waypoints: https://gis.stackexchange.com/questions/306014/how-to-put-geotagged-jpg-thumbnails-on-a-map-in-qgis#306073
 
-# ALGO
-## Extract metadata with exiftool
+## ALGO
+### Extract metadata with exiftool
 [exif cli documentation](https://exiftool.org/exiftool_pod.html)  
 
-### Some Basic Usage
+#### Some Basic Usage
 1. Get 1st level tags 
 ```
 exiftool FILE
