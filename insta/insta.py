@@ -22,24 +22,21 @@
  ***************************************************************************/
 """
 import os.path
-from pathlib import Path
-from subprocess import Popen, PIPE
-from shlex import split as shlex_split
 from logging import warning
+from pathlib import Path
+from shlex import split as shlex_split
 from sys import platform
-import numpy as np
-from pandas import Timestamp, DataFrame
-from pandas import read_csv
 
-from qgis.core import Qgis, QgsFeature, QgsMessageLog, QgsVectorLayer, QgsGeometry, QgsPointXY, QgsProject, QgsCoordinateReferenceSystem
-from qgis.PyQt.QtCore import QCoreApplication, QSettings, QTranslator
+import numpy as np
+from pandas import read_csv
+from qgis import processing
+from qgis.core import (Qgis, QgsCoordinateReferenceSystem, QgsMessageLog,
+                       QgsProject, QgsVectorLayer)
+from qgis.PyQt.QtCore import QCoreApplication, QProcess, QSettings, QTranslator
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
-from qgis import processing
 
-# Import the code for the dialog
 from .insta_dialog import InstaDialog
-# Initialize Qt resources from file resources.py
 from .resources import *
 
 MSGCAT = 'blitoPa'
@@ -78,6 +75,8 @@ class Insta:
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
         self.first_start = None
+        self.dlg = None
+        self.qproc = None
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -191,44 +190,59 @@ class Insta:
             self.first_start = False
             self.dlg = InstaDialog()
             QgsProject.instance().homePathChanged.connect( self.slot_homePathChanged)
-            QgsMessageLog.logMessage( 'Dialog created', MSGCAT , Qgis.Info)
+            self.dlg.checkBox_stdout.stateChanged.connect( self.slot_checkBox_stdout_StateChanged)
+            self.dlg.checkBox_stderr.stateChanged.connect( self.slot_checkBox_stderr_StateChanged)
+            self.dlg.pushButton_terminate.pressed.connect( self.pushButton_terminate_pressed)
+            QgsMessageLog.logMessage( 'Dialog created', MSGCAT, Qgis.Info)
         self.dlg.show()
         result = self.dlg.exec_()
         if result:
-            apath = self.dlg.mQgsFileWidget.filePath()
-            QgsMessageLog.logMessage('Reading media from '+apath, MSGCAT , Qgis.Info)
+            apath = Path(self.dlg.mQgsFileWidget.filePath())
+            QgsMessageLog.logMessage(f'Reading media from {apath}', MSGCAT, Qgis.Info)
             #TODO check if exif csv exists, compare length to files
-            exec_exiftool( apath, self.plugin_dir)
-            QgsMessageLog.logMessage('Extracted metadata to exiftool_output.csv', MSGCAT , Qgis.Info)
-            #TODO check if import csv exists, compare nans length to files
-            proc_exiftool_output(apath)
-            QgsMessageLog.logMessage('Processed metadata to import_me.csv', MSGCAT , Qgis.Info)
-            layer_from_file( apath, self.plugin_dir)
-            QgsMessageLog.logMessage('Loaded layer', MSGCAT , Qgis.Info)
-            QgsMessageLog.logMessage('All Done', MSGCAT , Qgis.Success)
-            return
-        QgsMessageLog.logMessage( 'Dialog closed, no action', MSGCAT , Qgis.Info)
+            if not self.qproc:
+                self.qproc = QProcessQsgMsgLog( apath=apath, plugin_dir=Path(self.plugin_dir))
+                self.slot_checkBox_stdout_StateChanged(self.dlg.checkBox_stdout.isChecked())
+                self.slot_checkBox_stderr_StateChanged(self.dlg.checkBox_stderr.isChecked())
+                self.qproc.start(*qproc_cmd(apath))
+            elif self.qproc.fin:
+                self.qproc.start(*qproc_cmd(apath))
+            else:
+                QgsMessageLog.logMessage('Process already running!', MSGCAT, Qgis.Info)
+        else: 
+            QgsMessageLog.logMessage( 'Dialog closed, no action', MSGCAT, Qgis.Info)
 
     def slot_homePathChanged(self, *args, **kwargs):
         self.dlg.mQgsFileWidget.setFilePath(QgsProject.instance().absolutePath())
-        QgsMessageLog.logMessage('Project homePath changed, changing folder chooser too...', MSGCAT , Qgis.Info)
+        QgsMessageLog.logMessage('Project homePath changed, changing folder chooser too...', MSGCAT, Qgis.Info)
 
-def exec_exiftool(apath, plugin_dir):
-    try:
-        if platform=='linux':
-            wd = Path(plugin_dir,'Image-ExifTool-12.62')
-            # filepath -> ImageDescription
-            pre = r"""./exiftool -s -ee3 -p '$filepath,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#}' -ext insp """
-            post = r""" 2>/dev/null | tee """
-            #cmd = shlex_split(pre+apath+post+str(Path(apath,'exiftool_output.csv')))
-            cmd = pre+apath+post+str(Path(apath,'exiftool_output.csv'))
-            QgsMessageLog.logMessage(f'cmd {cmd}', MSGCAT , Qgis.Debug)
-            process = Popen( cmd, stdout=PIPE, stderr=PIPE, cwd=wd, shell=True)
-            stdout, stderr = process.communicate()
-        QgsMessageLog.logMessage(f'stdout {stdout}', MSGCAT , Qgis.Debug)
-        QgsMessageLog.logMessage(f'stderr {stderr}', MSGCAT , Qgis.Debug)
-    except Exception as e:
-        QgsMessageLog.logMessage( f"Problem procesing exiftool output: {e}", MSGCAT , Qgis.Critical)
+    def slot_checkBox_stderr_StateChanged(self, state, *args, **kwargs):
+        if self.qproc:
+            if state==0:
+                self.qproc.toggle_stderr(False)
+            elif state==2:
+                self.qproc.toggle_stderr(True)
+
+    def pushButton_terminate_pressed(self):
+        if self.qproc:
+            self.qproc.terminate()
+
+    def slot_checkBox_stdout_StateChanged(self, state, *args, **kwargs):
+        if self.qproc:
+            if self.qproc.display_stdout != state:
+                self.qproc.display_stdout = state
+
+def qproc_cmd(apath):
+    # filepath -> ImageDescription
+    pre ='./exiftool'
+    post=' -s -ee3 -p $filepath,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#} -ext insp '
+    if platform=='linux':
+        plt=''
+    elif  platform=='Windows':
+        plt='(-1).exe'
+    cmd = pre+plt+post+str(apath)
+    QgsMessageLog.logMessage(f'cmd {cmd}', MSGCAT, Qgis.Info)
+    return cmd, apath
 
 def proc_exiftool_output(apath):
     """ load exiftool_output.csv
@@ -237,34 +251,35 @@ def proc_exiftool_output(apath):
     """
     try:
         #apath=Path.cwd()
-        df = read_csv(Path(apath,'exiftool_output.csv'), names=['filename','datetime','lat','lon','ele'], sep=',')
-        QgsMessageLog.logMessage( f'{len(df)} rows found', MSGCAT , Qgis.Info)
+        df = read_csv( apath/'exiftool_output.csv', names=['filename','datetime','lat','lon','ele'], sep=',')
+        QgsMessageLog.logMessage( f'{len(df)} records found', MSGCAT, Qgis.Info)
         df['tag']=((df['lat']!=0)|(df['lon']!=0)).astype(np.int64)
         for col in ['lat','lon','ele']:
             df[col] = df[col].apply( lambda x: np.nan if x==0 else x)
-        QgsMessageLog.logMessage( f"{df['tag'].sum()} tag sum", MSGCAT , Qgis.Info)
+        QgsMessageLog.logMessage( f"{df['tag'].sum()} correctly geo tagged", MSGCAT, Qgis.Info)
         df.sort_values('datetime', inplace=True)
         df.index = df.datetime
         #df[['lat','lon','ele']] = df[['lat','lon','ele']].interpolate(method='polynomial', order=5, limit_direction='both')
         df[['lat','lon','ele']] = df[['lat','lon','ele']].interpolate()
-        df.to_csv(Path(apath,'import_me.csv'),sep=',')
+        df.to_csv( apath/'import_me.csv',sep=',')
     except Exception as e:
-        QgsMessageLog.logMessage( f"Problem procesing exiftool output: {e}", MSGCAT , Qgis.Critical)
+        QgsMessageLog.logMessage( f"Problem procesing exiftool output: {e}", MSGCAT, Qgis.Critical)
 
 def layer_from_file(apath, plugin_dir):
     """ processing toolbox create points from csv
         load style
         add to layer
     """
-    try:
-        output = processing.run('qgis:createpointslayerfromtable',{ 'INPUT' : str(Path(apath,'import_me.csv')), 'MFIELD' : None, 'OUTPUT' : str(Path(apath,'blitopa.gpkg')), 'TARGET_CRS' : QgsCoordinateReferenceSystem('EPSG:4326'), 'XFIELD' : 'lon', 'YFIELD' : 'lat', 'ZFIELD' : 'ele', 'MFIELD' : 'datetime' })['OUTPUT']
-        
-        QgsMessageLog.logMessage( f"Createpointslayerfromtable created {output}", MSGCAT , Qgis.Info)
-        vectorLayer = QgsVectorLayer( str(Path(apath,'blitopa.gpkg'))+'|layername=blitopa', MSGCAT)
-        vectorLayer.loadNamedStyle( str(Path(plugin_dir, 'points_layerStyle.qml')))
-        QgsProject.instance().addMapLayer(vectorLayer)
-    except Exception as e:
-        QgsMessageLog.logMessage( f"Problem procesing exiftool output: {e}", MSGCAT , Qgis.Critical)
+    #try:
+    name = apath.stem
+    output = processing.run('qgis:createpointslayerfromtable',{ 'INPUT' : str(apath/'import_me.csv'), 'MFIELD' : None, 'OUTPUT' : str(apath/(name+'.gpkg')), 'TARGET_CRS' : QgsCoordinateReferenceSystem('EPSG:4326'), 'XFIELD' : 'lon', 'YFIELD' : 'lat', 'ZFIELD' : 'ele', 'MFIELD' : 'datetime' })['OUTPUT']
+    
+    QgsMessageLog.logMessage( f"Createpointslayerfromtable created {output}", MSGCAT, Qgis.Info)
+    vectorLayer = QgsVectorLayer( str(apath/(name+'.gpkg'))+'|layername='+name, name)
+    vectorLayer.loadNamedStyle( str(plugin_dir/'points_layerStyle.qml'))
+    QgsProject.instance().addMapLayer(vectorLayer)
+    #except Exception as e:
+    #    QgsMessageLog.logMessage( f"Problem procesing exiftool output: {e}", MSGCAT, Qgis.Critical)
 
 # TODO
 # InstaDoIt to qgsTask
@@ -272,48 +287,83 @@ def layer_from_file(apath, plugin_dir):
 # exiftool disable warnings
 # preguntarle al ivan cuanto cuesta leerlo rapido
 
-class InstaDoIt:
-    def __init__(self, img_dir, plugin_dir):
-        self.exif_dir = Path( plugin_dir) / 'exiftool'
-        self.img_dir = Path(img_dir)
-        self.img_cmd = "./exiftool -ee3 -p '${DateTimeOriginal} ${gpslatitude#} ${gpslongitude#} ${gpsaltitude#}' "
-        self.image_file_list = sorted( self.img_dir.glob('*.insp'))
-        self.vl = QgsVectorLayer("Point?crs=epsg:4326&field=filename:string&field=elevation:float&field=date:datetime",MSGCAT, "memory")
-        QgsMessageLog.logMessage( f'{len(self.image_file_list)} .insp files found', MSGCAT , Qgis.Info)
+#atEnd()
+ExitStatus = {0:'CrashExit',
+              1:'NormalExit'}
+#state()
+ProcessState = {0:'NotRunning',
+                1:'Running',
+                2:'Starting'}
+#error()
+ProcessError = {0:'Crashed',
+                1:'FailedToStart',
+                2:'ReadError',
+                3:'Timedout',
+                4:'UnknownError',
+                5:'WriteError'}
 
-    def check(self):
-        if self.image_file_list:
-            return True
-        return False
+class QProcessQsgMsgLog(QProcess):
+    def __init__(self, parent=None, apath=None, plugin_dir=None):
+        super().__init__(parent)
+        self.finished.connect(self.on_finished)
+        self.setInputChannelMode(QProcess.ForwardedInputChannel)
+        self.setProcessChannelMode( QProcess.SeparateChannels)
+        self.readyReadStandardOutput.connect(self.on_ready_read_standard_output)
+        self.readyReadStandardError.connect(self.on_ready_read_standard_error)
+        #self.proc.stateChanged.connect(self.externalProcess_handle_state)
+        #self.proc.finished.connect(self.externalProcess_finished)  # Clean up once complete.
+        self.setWorkingDirectory( str(plugin_dir/'exiftool'))
+        self.apath = apath
+        self.plugin_dir = plugin_dir
+        self.display_stdout = True
+        self.fin = False
 
-    def doit(self):
-        #df = DataFrame( columns=('datetime','filename','lat','lon','ele'))
-        feats = []
-        for i,afile in enumerate(self.image_file_list):
-            #QgsMessageLog.logMessage( f'{i}', MSGCAT , Qgis.Info)
-            cmd = self.img_cmd + f"'{afile}'"
-            #print('cmd',cmd)
-            #QgsMessageLog.logMessage( f'{i} {cmd}', MSGCAT , Qgis.Info)
-            process = Popen( shlex_split(cmd), stdout=PIPE, stderr=PIPE, cwd=self.exif_dir)
-            stdout, stderr = process.communicate()
-            #print('stdout',stdout)#.decode().replace('\n',''))
-            #print('stdout',stdout.decode().split())#.decode().replace('\n',''))
-            #QgsMessageLog.logMessage( f'{i} {cmd} {stdout} {stderr}', MSGCAT , Qgis.Info)
-            date,time,lat,lon,ele = stdout.decode().split()
-            if lat=='0' and lon=='0':
-                continue
-            dt = Timestamp(date.replace(':','-')+' '+time).isoformat(timespec='seconds')
-            #df.loc[i] = [dt, afile.stem, np.float32(lat), np.float32(lon), np.float32(ele)]
+    def toggle_stderr(self, enable):
+        if enable:
+            self.readyReadStandardError.connect(self.on_ready_read_standard_error)
+        else:
+            self.readyReadStandardError.disconnect()
 
-            f = QgsFeature()
-            f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(np.float32(lon), np.float32(lat))))
-            #f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(np.float32(lat), np.float32(lon))))
-            f.setId(i)
-            f.setAttributes([afile.stem, np.float32(ele), dt]) #QDateTime(QDate(2020, 5, 4), QTime(12, 13, 14)), QDate(2020, 5, 2), QTime(12, 13, 1)])
-            feats += [f]
-            #if i>50:
-            #    break
+    def start(self, command, apath):
+        super().start(command)
+        self.apath = apath
+        self.stdout_file = open( self.apath/'exiftool_output.csv', "wb")
+        QgsMessageLog.logMessage(f"QProcess started, state: {ProcessState[self.state()]}", MSGCAT, Qgis.Info)
 
-        #QgsMessageLog.logMessage( f'{df}', MSGCAT , Qgis.Info)
-        self.vl.dataProvider().addFeatures(feats)
-        return self.vl
+    def terminate(self):
+        process_code = self.state()
+        if process_code != QProcess.ProcessState.NotRunning:
+            QgsMessageLog.logMessage(f"QProcess terminating, state: {ProcessState[process_code]}", MSGCAT, Qgis.Warning)
+            self.terminate()
+        else:
+            QgsMessageLog.logMessage(f"QProcess can't terminate, state: {ProcessState[process_code]}", MSGCAT, Qgis.Warning)
+
+    def on_finished(self):
+        self.stdout_file.close()
+        exit_code = self.exitCode()
+        if exit_code==QProcess.ExitStatus.NormalExit:
+            QgsMessageLog.logMessage("QProcess finished with NormalExit status", MSGCAT, Qgis.Info)
+            QgsMessageLog.logMessage('Extracted metadata to exiftool_output.csv', MSGCAT , Qgis.Info)
+            #TODO check if import csv exists, compare nans length to files
+            proc_exiftool_output(self.apath)
+            QgsMessageLog.logMessage('Processed metadata to import_me.csv', MSGCAT, Qgis.Info)
+            layer_from_file( self.apath, self.plugin_dir)
+            QgsMessageLog.logMessage('Loaded layer', MSGCAT, Qgis.Info)
+            QgsMessageLog.logMessage('All Done', MSGCAT, Qgis.Success)
+        elif exit_code==QProcess.ExitStatus.CrashExit:
+            QgsMessageLog.logMessage(f"QProcess ProcessError {ProcessError[self.error()]}", MSGCAT, Qgis.Critical)
+        else:
+            QgsMessageLog.logMessage("QProcess finished with unknown ExitStatus!!", MSGCAT, Qgis.Critical)
+        self.fin = True
+
+    def on_ready_read_standard_output(self):
+        output = self.readAllStandardOutput()
+        self.stdout_file.write(output)
+        if self.display_stdout:
+            output = bytes(output).decode("utf8")
+            QgsMessageLog.logMessage(output, MSGCAT, Qgis.Info)
+
+    def on_ready_read_standard_error(self):
+        output = self.readAllStandardError()
+        output = bytes(output).decode("utf8")
+        QgsMessageLog.logMessage(output, MSGCAT, Qgis.Info)
