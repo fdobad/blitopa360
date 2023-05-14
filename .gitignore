@@ -13,3 +13,7 @@ data/
 references/
 result/
 source/
+
+*.qgz
+*.gpkg
+*.csv
