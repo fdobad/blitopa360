@@ -250,9 +250,16 @@ def proc_exiftool_output(apath):
         write import_me.csv
     """
     try:
-        #apath=Path.cwd()
-        df = read_csv( apath/'exiftool_output.csv', names=['filename','datetime','lat','lon','ele'], sep=',')
-        QgsMessageLog.logMessage( f'{len(df)} records found', MSGCAT, Qgis.Info)
+        #afile=Path.cwd()/'exiftool_output.csv'
+        afile=apath/'exiftool_output.csv'
+        if not afile.is_file() or afile.stat().st_size == 0:
+            QgsMessageLog.logMessage( f'{afile} file problem! Did you see a regular stdout?', MSGCAT, Qgis.Critical)
+        df = read_csv( afile, names=['filename','datetime','lat','lon','ele'], sep=',')
+        len_df = len(df)
+        if len_df == 0:
+            QgsMessageLog.logMessage( f'{len(df)} records found', MSGCAT, Qgis.Critical)
+        else:
+            QgsMessageLog.logMessage( f'{len(df)} records found', MSGCAT, Qgis.Success)
         df['tag']=((df['lat']!=0)|(df['lon']!=0)).astype(np.int64)
         for col in ['lat','lon','ele']:
             df[col] = df[col].apply( lambda x: np.nan if x==0 else x)
@@ -270,16 +277,21 @@ def layer_from_file(apath, plugin_dir):
         load style
         add to layer
     """
-    #try:
-    name = apath.stem
-    output = processing.run('qgis:createpointslayerfromtable',{ 'INPUT' : str(apath/'import_me.csv'), 'MFIELD' : None, 'OUTPUT' : str(apath/(name+'.gpkg')), 'TARGET_CRS' : QgsCoordinateReferenceSystem('EPSG:4326'), 'XFIELD' : 'lon', 'YFIELD' : 'lat', 'ZFIELD' : 'ele', 'MFIELD' : 'datetime' })['OUTPUT']
-    
-    QgsMessageLog.logMessage( f"Createpointslayerfromtable created {output}", MSGCAT, Qgis.Info)
-    vectorLayer = QgsVectorLayer( str(apath/(name+'.gpkg'))+'|layername='+name, name)
-    vectorLayer.loadNamedStyle( str(plugin_dir/'points_layerStyle.qml'))
-    QgsProject.instance().addMapLayer(vectorLayer)
-    #except Exception as e:
-    #    QgsMessageLog.logMessage( f"Problem procesing exiftool output: {e}", MSGCAT, Qgis.Critical)
+    try:
+        #afile=Path.cwd()/'import_me.csv'
+        afile=apath/'import_me.csv'
+        if not afile.is_file() or afile.stat().st_size == 0:
+            QgsMessageLog.logMessage( f'{afile} file problem! Did you see a regular stdout?', MSGCAT, Qgis.Critical)
+        name = apath.stem
+        gpkg_str = str(apath/(name+'.gpkg'))
+        output = processing.run('qgis:createpointslayerfromtable',{ 'INPUT' : str(afile), 'MFIELD' : None, 'OUTPUT' : gpkg_str, 'TARGET_CRS' : QgsCoordinateReferenceSystem('EPSG:4326'), 'XFIELD' : 'lon', 'YFIELD' : 'lat', 'ZFIELD' : 'ele', 'MFIELD' : 'datetime' })['OUTPUT']
+        
+        QgsMessageLog.logMessage( f"Createpointslayerfromtable created {output}", MSGCAT, Qgis.Info)
+        vectorLayer = QgsVectorLayer( gpkg_str+'|layername='+name, name)
+        vectorLayer.loadNamedStyle( str(plugin_dir/'points_layerStyle.qml'))
+        QgsProject.instance().addMapLayer(vectorLayer)
+    except Exception as e:
+        QgsMessageLog.logMessage( f"Problem procesing exiftool output: {e}", MSGCAT, Qgis.Critical)
 
 # TODO
 # InstaDoIt to qgsTask
