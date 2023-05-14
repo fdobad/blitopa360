@@ -18,3 +18,4 @@ source/
 *.qgz
 *.gpkg
 *.csv
+/.vs
