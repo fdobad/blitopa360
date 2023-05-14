@@ -6,14 +6,14 @@
 name=blitoPa insta360 importer
 qgisMinimumVersion=3.0
 description=Import and preview Insta 360 files to a QGIS layer
-version=0.1
+version=1.0
 author=fdo bad
-email=fbadilla@ing.uchile.cl
+email=29801096+fdobad@users.noreply.github.com
 
 about=Select a folder with IMG...insp or VID...insv insta360 files, view them on a vector layer
 
-tracker=http://bugs
-repository=http://repo
+tracker=https://github.com/fdobad/blitopa360/issues
+repository=https://github.com/fdobad/blitopa360
 # End of mandatory metadata
 
 # Recommended items:
@@ -23,9 +23,9 @@ hasProcessingProvider=no
 # changelog=
 
 # Tags are comma separated with spaces allowed
-tags=python
+tags=python3 exiftool insta360
 
-homepage=http://homepage
+homepage=https://github.com/fdobad/blitopa360/
 category=Plugins
 icon=icon69.png
 # experimental flag

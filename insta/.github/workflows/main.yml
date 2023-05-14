@@ -1,0 +1,29 @@
+name: Create Archive
+
+on:
+  create:
+    tags:
+      - v*
+
+permissions:
+  contents: write
+
+jobs:
+  build-n-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@master
+
+    - name: Action-zip
+      uses: montudor/action-zip@v1
+      with:
+        args: zip -qq -x@.gitignore -r insta.zip insta
+ 
+    - name: Create Release
+      uses: ncipollo/release-action@v1.12.0
+      with:
+        artifacts: 'insta.zip'
+        token: ${{ secrets.GITHUB_TOKEN }}
+
