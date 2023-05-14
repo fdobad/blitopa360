@@ -9,6 +9,7 @@ __pycache__/
 *$py.class
 
 # ignore data
+attempts/
 data/
 references/
 result/
