@@ -7,7 +7,7 @@ Import Insta360 media into a QGIS point layer, click to launch your favorite vie
 2. Type 'blitopa'
 3. Click 'Install Plugin'
 ![install gif](blitopa_installation.gif)
-Now you have a new icon ![icon](insta/insta16.png) in the plugin toolbar
+Now you have a new icon ![icon](insta/icon16.png) in the plugin toolbar
 
 # Usage
 ## Importing
