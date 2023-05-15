@@ -234,13 +234,11 @@ class Insta:
 
 def qproc_cmd(apath):
     # filepath -> ImageDescription
-    pre ='./exiftool'
-    post=' -s -ee3 -p $filepath,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#} -ext insp '
     if plt_sys()=='Windows':
-        plt='(-1).exe'
+        cmd =r"""cmd.exe /c .\exiftool.exe -s -ee3 -p '$filepath,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#}' -ext insp """
     else:
-        plt=''
-    cmd = pre+plt+post+str(apath)
+        cmd ='./exiftool -s -ee3 -p $filepath,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#} -ext insp '
+    cmd += str(apath)
     QgsMessageLog.logMessage(f'cmd {cmd}', MSGCAT, Qgis.Info)
     return cmd, apath
 
@@ -341,6 +339,10 @@ class QProcessQsgMsgLog(QProcess):
         self.apath = apath
         self.stdout_file = open( self.apath/'exiftool_output.csv', "wb")
         QgsMessageLog.logMessage(f"QProcess started, state: {ProcessState[self.state()]}", MSGCAT, Qgis.Info)
+        #self.waitForStarted()
+        #self.write(b'\r')
+        #QgsMessageLog.logMessage(f" b\\r sent {ProcessState[self.state()]}", MSGCAT, Qgis.Info)
+
 
     def terminate(self):
         process_code = self.state()
