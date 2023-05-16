@@ -20,8 +20,9 @@ _new point layer will be displayed, named as the folder with the geolocalized ph
 ## Viewing
 - Once per new layer: Click on the "Run Feature Action" (looks like a cog with a play button being clicked) configuration (the dropdown next to it): select 'Open File'
 - Select the correct layer, click on a point to launch your default viewer program
-![usage gif](blitopa_usage.gif)
+![usage gif](blitopa_usage.gif)  
 
+Installing insta360-Player is [recommended](https://descargar.freedownloadmanager.org/Windows-PC/Insta360-Player/GRATIS-2.3.6.html)
 
 
 # Development:

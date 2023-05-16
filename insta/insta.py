@@ -235,7 +235,7 @@ class Insta:
 def qproc_cmd(apath):
     # filepath -> ImageDescription
     if plt_sys()=='Windows':
-        cmd =r"""cmd.exe /c .\exiftool.exe -s -ee3 -p '$filepath,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#}' -ext insp """
+        cmd =r"""cmd.exe /c .\exiftool.exe -s -ee3 -p $filepath,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#} -ext insp """
     else:
         cmd ='./exiftool -s -ee3 -p $filepath,${CreateDate;DateFmt("%s")},${gpslatitude#},${gpslongitude#},${gpsaltitude#} -ext insp '
     cmd += str(apath)
