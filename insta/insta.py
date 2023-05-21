@@ -21,6 +21,8 @@
  *                                                                         *
  ***************************************************************************/
 """
+import os
+import stat
 import os.path
 from logging import warning
 from pathlib import Path
@@ -77,6 +79,9 @@ class Insta:
         self.first_start = None
         self.dlg = None
         self.qproc = None
+        if plt_sys()!='Windows':
+            os.chmod(Path(self.plugin_dir,'exiftool','exiftool'), stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH)
+            #os.chmod(Path(Path.cwd(),'exiftool'), stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH)
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -342,7 +347,6 @@ class QProcessQsgMsgLog(QProcess):
         #self.waitForStarted()
         #self.write(b'\r')
         #QgsMessageLog.logMessage(f" b\\r sent {ProcessState[self.state()]}", MSGCAT, Qgis.Info)
-
 
     def terminate(self):
         process_code = self.state()

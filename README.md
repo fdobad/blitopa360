@@ -26,6 +26,8 @@ _new point layer will be displayed, named as the folder with the geolocalized ph
 
 Installing insta360-Player is [recommended](https://descargar.freedownloadmanager.org/Windows-PC/Insta360-Player/GRATIS-2.3.6.html)
 
+### Upgrade dialog
+![usage gif](blitopa_upgrade.jpg)
 
 # Development:
 ### Insta360 files:
