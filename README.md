@@ -44,7 +44,23 @@ Installing insta360-Player is [recommended](https://descargar.freedownloadmanage
     - transform a fisheye image into a normal perspective: https://github.com/duducosmos/defisheye
 5. put a thumbnail in each waypoints: https://gis.stackexchange.com/questions/306014/how-to-put-geotagged-jpg-thumbnails-on-a-map-in-qgis#306073
 
-## ALGO
+## round knowledge
+https://gis.stackexchange.com/questions/8650/measuring-accuracy-of-latitude-and-longitude/8674#8674
+
+    decimal
+    places   degrees          distance
+    -------  -------          --------
+    0        1                111  km
+    1        0.1              11.1 km
+    2        0.01             1.11 km
+    3        0.001            111  m
+    4        0.0001           11.1 m
+    5        0.00001          1.11 m
+    6        0.000001         11.1 cm
+    7        0.0000001        1.11 cm
+    8        0.00000001       1.11 mm
+
+## ALGORITHM
 ### Extract metadata with exiftool
 [exif cli documentation](https://exiftool.org/exiftool_pod.html)  
 
