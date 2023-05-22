@@ -101,6 +101,9 @@ ${CreateDate;DateFmt("%s")}
 
 ### insp
 ```
+./exiftool -ee -c "%+.5f" -d "%s" -p '$ImageDescription,$CreateDate,${gpsposition}' IMG_20230
+
+
 ./exiftool -s -ee IMG...insp > insp_all_tags.txt
 ./exiftool -ee -p '${creationdate} ${gpslatitude#} ${gpslongitude#} ${gpsaltitude#}' 
 ./exiftool -s -ee3 -p '$ImageDescription $CreateDate $gpslatitude $gpslongitude $gpsaltitude' ~/directory/ 2>/dev/null | tee output.txt
