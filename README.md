@@ -146,15 +146,15 @@ find . -name '*.insv' -exec du -h '{}' \;
 ```
 
 # references
-[Exif forum insta360 post](https://exiftool.org/forum/index.php?topic=9884.30)
-[Extract GPS Data from .insv. insta360 forum](https://forums.insta360.com/section/14/post/5415/)
-[exiftool](https://exiftool.org/)
-https://github.com/exiftool/exiftool
+[Exif forum insta360 post](https://exiftool.org/forum/index.php?topic=9884.30)  
+[Extract GPS Data from .insv. insta360 forum](https://forums.insta360.com/section/14/post/5415/)  
+[exiftool](https://exiftool.org/)  
+https://github.com/exiftool/exiftool  
 
 # other
-[c++ image conversion](https://github.com/chinhsuanwu/360-converter/blob/master/example/example.cpp)
-https://github.com/tu-darmstadt-ros-pkg/image_projection
-https://github.com/sunset1995/py360convert
-https://github.com/timy90022/Perspective-and-Equirectangular
-https://photo-sphere-viewer.js.org
-https://docs.qgis.org/3.28/en/docs/user_manual/working_with_gps/live_GPS_tracking.html
+[c++ image conversion](https://github.com/chinhsuanwu/360-converter/blob/master/example/example.cpp)  
+https://github.com/tu-darmstadt-ros-pkg/image_projection  
+https://github.com/sunset1995/py360convert  
+https://github.com/timy90022/Perspective-and-Equirectangular  
+https://photo-sphere-viewer.js.org  
+https://docs.qgis.org/3.28/en/docs/user_manual/working_with_gps/live_GPS_tracking.html  
